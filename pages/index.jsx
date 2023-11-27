@@ -5,6 +5,7 @@ import {
   Drawer,
   HoverCard,
   Input,
+  Loader,
   NumberInput,
   Switch,
   Tabs,
@@ -15,12 +16,17 @@ import {
 
 import { IconCheck, IconPlus, IconSearch } from "@tabler/icons";
 import moment from "moment/moment";
-import { useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { notifications } from "@mantine/notifications";
+import { ActionsContext } from "../context/action";
 
 export default function Home() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+
+  const [serialNumber, setSerialNumber] = useState("");
+  const [message, setMessage] = useState("");
+  const { actions, setActions } = useContext(ActionsContext);
 
   const [account, setAccount] = useState({
     name: "Stephen Kinyanjui",
@@ -30,6 +36,63 @@ export default function Home() {
     emailAlerts: false,
     image: null,
   });
+
+  const onWrite = async (message) => {
+    try {
+      const ndef = new window.NDEFReader();
+      // This line will avoid showing the native NFC UI reader
+      await ndef.scan();
+      await ndef.write({ records: [{ recordType: "text", data: message }] });
+      alert(`Value Saved!`);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const scan = useCallback(async () => {
+    if ("NDEFReader" in window) {
+      try {
+        const ndef = new window.NDEFReader();
+        await ndef.scan();
+
+        console.log("Scan started successfully.");
+        ndef.onreadingerror = () => {
+          console.log("Cannot read data from the NFC tag. Try another one?");
+        };
+
+        ndef.onreading = (event) => {
+          console.log("NDEF message read.");
+          onReading(event);
+          setActions({
+            scan: "scanned",
+          });
+        };
+      } catch (error) {
+        console.log(`Error! Scan failed to start: ${error}.`);
+      }
+    }
+  }, [setActions]);
+
+  const onReading = ({ message, serialNumber }) => {
+    setSerialNumber(serialNumber);
+    for (const record of message.records) {
+      switch (record.recordType) {
+        case "text":
+          const textDecoder = new TextDecoder(record.encoding);
+          setMessage(textDecoder.decode(record.data));
+          break;
+        case "url":
+          // TODO: Read URL record with record data.
+          break;
+        default:
+        // TODO: Handle other records with record data.
+      }
+    }
+  };
+
+  useEffect(() => {
+    scan();
+  }, [scan]);
 
   return (
     <div className="p-8">
@@ -192,6 +255,7 @@ export default function Home() {
         <Tabs.List>
           <Tabs.Tab value="payments">Recent payments</Tabs.Tab>
           <Tabs.Tab value="tags">Tags</Tabs.Tab>
+          <Tabs.Tab value="scanner">Scanner</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="payments" pt="xs">
           <br />
@@ -215,12 +279,31 @@ export default function Home() {
                 height: 64,
                 padding: 0,
               }}
+              onClick={() => onWrite("Stephen Kinuthia , The G.O.A.T")}
               radius="xl"
               className="absolute left-[calc(50%-32px)]"
             >
               <IconPlus />
             </Button>
           </div>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="scanner" pt="xs">
+          <>
+            {actions?.scan === "scanned" ? (
+              <div>
+                <p>Serial Number: {serialNumber}</p>
+                <p>Message: {message}</p>
+              </div>
+            ) : (
+              <div className="scanner">
+                <div className="scanner-container">
+                  <Loader />
+                  <p className="scanner-text">Scanning...</p>
+                </div>
+              </div>
+            )}
+          </>
         </Tabs.Panel>
       </Tabs>
     </div>
