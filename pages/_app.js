@@ -3,7 +3,7 @@ import { MantineProvider, createEmotionCache } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 
 import { withUrqlClient } from "next-urql";
-import { SessionProvider, signIn } from "next-auth/react";
+import { SessionProvider } from "next-auth/react";
 
 import "tailwindcss/tailwind.css";
 import "react-responsive-carousel/lib/styles/carousel.min.css";

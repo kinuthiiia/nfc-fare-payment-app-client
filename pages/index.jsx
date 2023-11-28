@@ -19,6 +19,8 @@ import moment from "moment/moment";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { ActionsContext } from "../context/action";
+import { Userdatacontext } from "../context/userdata";
+import { useSession, signIn } from "next-auth/react";
 
 export default function Home() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -26,15 +28,18 @@ export default function Home() {
 
   const [serialNumber, setSerialNumber] = useState("");
   const [message, setMessage] = useState("");
+
+  const { data: session } = useSession();
   const { actions, setActions } = useContext(ActionsContext);
+  const { user, refreshUser } = useContext(Userdatacontext);
 
   const [account, setAccount] = useState({
-    name: "Stephen Kinyanjui",
-    email: "s2kinyanjui@gmail.com",
-    phoneNumber: "0748920306",
-    smsAlerts: true,
-    emailAlerts: false,
-    image: null,
+    name: user?.name,
+    email: user?.email,
+    phoneNumber: user?.phoneNumber,
+    smsAlerts: user?.smsNotification,
+    emailAlerts: user?.emailNotification,
+    image: user?.image,
   });
 
   const onWrite = async (message) => {
@@ -94,17 +99,27 @@ export default function Home() {
     scan();
   }, [scan]);
 
+  console.log(user);
+
   return (
     <div className="p-8">
       <div className="flex justify-end">
-        <UnstyledButton onClick={() => setProfileOpen(true)}>
-          <Avatar src="/avatar.png" alt="it's me" radius="sm" />
-        </UnstyledButton>
+        {session && user ? (
+          <UnstyledButton onClick={() => setProfileOpen(true)}>
+            <Avatar src={user?.image} alt="it's me" radius="sm" />
+          </UnstyledButton>
+        ) : (
+          <Button variant="subtle" onClick={signIn}>
+            Sign in
+          </Button>
+        )}
       </div>
       <div className="mt-8">
-        <p className="w-full text-center text-[1.3rem]">Hello Stephen!👋🏾</p>
+        <p className="w-full text-center text-[1.3rem]">
+          Hello {user?.name.split(" ")[0]}!👋🏾
+        </p>
         <h1 className="w-full text-center text-[3rem] font-semibold mt-2">
-          Ksh. 4500
+          Ksh. {user?.accountBalance.toLocaleString("en-US")}
         </h1>
         <p className="w-full text-center  text-[#909090]">Available balance</p>
         <br />
@@ -148,7 +163,7 @@ export default function Home() {
         >
           <div className="mt-8">
             <img
-              src="/avatar.png"
+              src={user?.image}
               alt="profile"
               className="mx-auto w-[150px] h-[150px] object-cover"
             />

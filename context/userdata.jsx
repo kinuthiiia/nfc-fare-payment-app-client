@@ -8,57 +8,24 @@ export default function UserData({ children }) {
   const { data: session } = useSession();
 
   const GET_USER_DATA = `
-        query GET_USER_DATA($email: String) {
-        getUser(email: $email) {
-            name
-            phoneNumber
-            id
-            cart {
-              id
-              product {
-                id
-                name
-                images
-                variants {
-                    thumbnail
-                    price
-                    label
-                    sale {
-                      salePrice
-                      startTime
-                      endTime
-                    }
-                    available
-                }
-              }
-              quantity
-              variant
-            }
-            saved {
-            id
-            name
-            images
-            variants {
-                thumbnail
-                price
-                label
-                sale {
-                  salePrice
-                  startTime
-                  endTime
-                }
-                available
-              }
-            }
-            addresses {
-                id
-                label
-                lat
-                lng
-                default
-            }
-          }
+    query GetAccount($email: String) {
+      getAccount(email: $email) {
+        accountBalance
+        id
+        image
+        name
+        phoneNumber
+        smsNotification
+        tags {
+          cancelledAt
+          createdAt
+          serial
+          id
         }
+        email
+        emailNotification
+      }
+    }
     `;
 
   const [{ data, fetching, error }, reexecuteQuery] = useQuery({
@@ -69,7 +36,9 @@ export default function UserData({ children }) {
   });
 
   return (
-    <Userdatacontext.Provider value={{ data: data?.getUser, reexecuteQuery }}>
+    <Userdatacontext.Provider
+      value={{ user: data?.getAccount, refreshUser: reexecuteQuery }}
+    >
       {children}
     </Userdatacontext.Provider>
   );
