@@ -54,4 +54,5 @@ function App(props) {
 export default withUrqlClient((_ssrExchange, ctx) => ({
   // ...add your Client options here
   url: process.env.NEXT_PUBLIC_SERVER_REMOTE,
+  requestPolicy: "network-only",
 }))(App);

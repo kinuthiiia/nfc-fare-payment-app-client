@@ -5,7 +5,6 @@ import {
   Drawer,
   HoverCard,
   Input,
-  Loader,
   NumberInput,
   Switch,
   Tabs,
@@ -16,22 +15,58 @@ import {
 
 import { IconCheck, IconPlus, IconSearch } from "@tabler/icons";
 import moment from "moment/moment";
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { notifications } from "@mantine/notifications";
-import { ActionsContext } from "../context/action";
-import { Userdatacontext } from "../context/userdata";
-import { useSession, signIn } from "next-auth/react";
+
+import { useSession, signIn, signOut } from "next-auth/react";
+import { io } from "socket.io-client";
+
+import { useQuery } from "urql";
+
+let socket;
+
+const GET_USER_DATA = `
+    query GetAccount($email: String) {
+      getAccount(email: $email) {
+        accountBalance
+        id
+        image
+        name
+        phoneNumber
+        smsNotification
+        tags {
+          cancelledAt
+          createdAt
+          serial
+          id
+        }
+        transactions{
+          amount
+          collector{
+            name            
+          }
+          createdAt
+        }
+        email
+        emailNotification
+      }
+    }
+    `;
 
 export default function Home() {
+  const { data: session } = useSession();
+
+  const [{ data, fetching, error }, reexecuteQuery] = useQuery({
+    query: GET_USER_DATA,
+    variables: {
+      email: session?.user?.email,
+    },
+  });
+
+  const user = data?.getAccount;
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-
-  const [serialNumber, setSerialNumber] = useState("");
-  const [message, setMessage] = useState("");
-
-  const { data: session } = useSession();
-  const { actions, setActions } = useContext(ActionsContext);
-  const { user, refreshUser } = useContext(Userdatacontext);
 
   const [account, setAccount] = useState({
     name: user?.name,
@@ -42,64 +77,29 @@ export default function Home() {
     image: user?.image,
   });
 
-  const onWrite = async (message) => {
-    try {
-      const ndef = new window.NDEFReader();
-      // This line will avoid showing the native NFC UI reader
-      await ndef.scan();
-      await ndef.write({ records: [{ recordType: "text", data: message }] });
-      alert(`Value Saved!`);
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
-  const scan = useCallback(async () => {
-    if ("NDEFReader" in window) {
-      try {
-        const ndef = new window.NDEFReader();
-        await ndef.scan();
-
-        console.log("Scan started successfully.");
-        ndef.onreadingerror = () => {
-          console.log("Cannot read data from the NFC tag. Try another one?");
-        };
-
-        ndef.onreading = (event) => {
-          console.log("NDEF message read.");
-          onReading(event);
-          setActions({
-            scan: "scanned",
-          });
-        };
-      } catch (error) {
-        console.log(`Error! Scan failed to start: ${error}.`);
-      }
-    }
-  }, [setActions]);
-
-  const onReading = ({ message, serialNumber }) => {
-    setSerialNumber(serialNumber);
-    for (const record of message.records) {
-      switch (record.recordType) {
-        case "text":
-          const textDecoder = new TextDecoder(record.encoding);
-          setMessage(textDecoder.decode(record.data));
-          break;
-        case "url":
-          // TODO: Read URL record with record data.
-          break;
-        default:
-        // TODO: Handle other records with record data.
-      }
-    }
-  };
-
   useEffect(() => {
-    scan();
-  }, [scan]);
+    socketInitializer();
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
-  console.log(user);
+  const socketInitializer = async () => {
+    socket = io(process.env.NEXT_PUBLIC_WS_SERVER);
+
+    socket.on("connect", () => {
+      console.log("Socket connection setup");
+    });
+
+    socket.on("refresh", (tag) => {
+      console.log("Refreshing..");
+      reexecuteQuery();
+    });
+  };
+
+  if (fetching) return <p>Loading...</p>;
+
+  if (error) return <p>Error...</p>;
 
   return (
     <div className="p-8">
@@ -254,10 +254,16 @@ export default function Home() {
           </div>
 
           <div className="space-y-6 mt-12">
-            <Button fullWidth color="dark" size="lg">
+            <Button fullWidth color="dark" size="lg" onClick={null}>
               Save
             </Button>
-            <Button color="red" variant="subtle" fullWidth size="lg">
+            <Button
+              color="red"
+              variant="subtle"
+              fullWidth
+              size="lg"
+              onClick={signOut}
+            >
               Log out
             </Button>
           </div>
@@ -270,20 +276,21 @@ export default function Home() {
         <Tabs.List>
           <Tabs.Tab value="payments">Recent payments</Tabs.Tab>
           <Tabs.Tab value="tags">Tags</Tabs.Tab>
-          <Tabs.Tab value="scanner">Scanner</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="payments" pt="xs">
           <br />
           <Input icon={<IconSearch />} placeholder="Search" variant="filled" />
-          {[1, 2, 3, 4].map((el) => (
-            <Payment />
-          ))}
+          {user?.transactions
+            .sort((a, b) => Number(b?.createdAt) - Number(a?.createdAt))
+            .map((transaction) => (
+              <Transaction transaction={transaction} />
+            ))}
         </Tabs.Panel>
 
         <Tabs.Panel value="tags" pt="xs">
           <br />
-          {[1, 2].map((el) => (
-            <Tag />
+          {user?.tags.map((tag) => (
+            <Tag tag={tag} />
           ))}
 
           <div className="fixed bottom-4 w-[calc(100%-64px)]">
@@ -302,39 +309,29 @@ export default function Home() {
             </Button>
           </div>
         </Tabs.Panel>
-
-        <Tabs.Panel value="scanner" pt="xs">
-          <>
-            {actions?.scan === "scanned" ? (
-              <div>
-                <p>Serial Number: {serialNumber}</p>
-                <p>Message: {message}</p>
-              </div>
-            ) : (
-              <div className="scanner">
-                <div className="scanner-container">
-                  <Loader />
-                  <p className="scanner-text">Scanning...</p>
-                </div>
-              </div>
-            )}
-          </>
-        </Tabs.Panel>
       </Tabs>
     </div>
   );
 }
 
-const Payment = ({ payment }) => {
+const Transaction = ({ transaction }) => {
   return (
     <div className="flex justify-between my-8">
       <div className="flex space-x-8">
         <div>
-          <h1 className="font-medium text-[1.2rem]">New NNUS - KDJ 221R</h1>
-          <p>{moment(Date.now()).format("Do MMM YYYY | HH:mm a")}</p>
+          <h1 className="font-medium text-[1.2rem]">
+            {transaction?.collector?.name}
+          </h1>
+          <p>
+            {moment(new Date(Number(transaction?.createdAt))).format(
+              "Do MMM YYYY | HH:mm a"
+            )}
+          </p>
         </div>
       </div>
-      <h1 className="font-medium text-[1.2rem] text-red-600">-Ksh. 300</h1>
+      <h1 className="font-medium text-[1.2rem] text-red-600">
+        -Ksh. {transaction?.amount.toLocaleString("en-US")}
+      </h1>
     </div>
   );
 };
@@ -354,7 +351,9 @@ const Tag = ({ tag }) => {
     <div className="bg-gray-200 p-6 my-4 rounded-lg flex justify-between">
       <div>
         <h1 className="font-medium text-[1.2rem]">Home keys</h1>
-        <p>{`${moment(Date.now()).format("Do MMM YYYY")} - present`}</p>
+        <p>{`${moment(new Date(Number(tag?.createdAt))).format(
+          "Do MMM YYYY"
+        )} - present`}</p>
         <Badge variant="filled" color="green">
           Active
         </Badge>
