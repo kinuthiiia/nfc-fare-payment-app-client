@@ -7,7 +7,6 @@ import { SessionProvider } from "next-auth/react";
 
 import "tailwindcss/tailwind.css";
 import "react-responsive-carousel/lib/styles/carousel.min.css";
-import UserData from "../context/userdata";
 
 function App(props) {
   const {
@@ -42,9 +41,7 @@ function App(props) {
         >
           <Notifications />
 
-          <UserData>
-            <Component {...pageProps} />
-          </UserData>
+          <Component {...pageProps} />
         </MantineProvider>
       </SessionProvider>
     </>
